@@ -8,7 +8,9 @@ from twilio.rest.lookups import TwilioLookupsClient
 import os
 import re
 import yaml
+import pprint
 
+# Load my twilio keys and good secret stuff.
 with open("keys.yaml", 'r') as stream:
   try:
     keys = yaml.load(stream)
@@ -21,30 +23,30 @@ account_sid = keys["account_sid"]
 auth_token  = keys["auth_token"]
 client = TwilioRestClient(account_sid, auth_token)
 
-@app.route('/sms', methods=['POST'])
-# respond to inbound message
+# Root page
+@app.route('/', methods=['GET'])
+def root():
+  return "Text a 10-digit phone number to " + keys["my_number"] + " for number information."
 
+# Post path for twilio data
+@app.route('/sms', methods=['POST'])
 def respond():
 
   inbound = request.values.get('Body')
   inbound = re.sub(r"\s|\D|\W", "", inbound)
 
   if len(inbound) != 10:
-    response = twiml.Response()
-    message = response.message("Error: number doesn't have exactly 10 digits!", sender = keys["my_number"])
-
-    return str(response)
+    message = client.messages.create(to = keys["my_number"], from_ = keys["my_twilio_number"], body = "Error: number doesn't have exactly 10 digits!")
   else:
-    account_sid = keys["account_sid"]
-    auth_token  = keys["auth_token"]
-    lookup = TwilioLookupsClient(account_sid, auth_token)
-    number = lookup.phone_numbers.get(inbound, include_carrier_info=True)
+    number = TwilioLookupsClient(account_sid, auth_token).phone_numbers.get(inbound, include_carrier_info = True)
+    message = "Carrier name: " + str(number.carrier['name']) + ";  Carrier Type: " + str(number.carrier['type']) + ";  Error Code:" + str(number.carrier['error_code'])
+    resp = twiml.Response()
+    resp.message(message)
+    return str(resp)
 
-    response = twiml.Response()
-    message = response.message("Number Owner: {0}.Carrier: {1}. Type: {2}. Error code (if any): {3}".format(str(number.carrier['name']), str(number.carrier['type']), str(number.carrier['error_code']))
-, sender = keys["my_number"], action = keys["ngrok_url"] + "sms_callback")
-    return str(response)
-
+# @app.route('/sms_callback', methods=["POST"])
+# def respond():
+#   return "thing"
 
 if __name__ == '__main__':
   app.run(debug=True)
